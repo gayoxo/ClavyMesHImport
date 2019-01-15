@@ -121,7 +121,8 @@ public class LoadCollectionMesH extends LoadCollection{
 	        if (fileEntry.isDirectory()) {
 	            listFilesForFolder(fileEntry,archivos);
 	        } else {
-	        	archivos.add(fileEntry);
+	        	 if (fileEntry.getAbsolutePath().endsWith(".xml"))
+	        	 	archivos.add(fileEntry);
 
 	        }
 	    }
@@ -150,7 +151,7 @@ public class LoadCollectionMesH extends LoadCollection{
 	            }
 	            fos.close();
 	            zipEntry = zis.getNextEntry();
-	            if (newFile.getAbsolutePath().endsWith(".xml"));
+	            if (newFile.getAbsolutePath().endsWith(".xml"))
 	            	Archivos.add(newFile);
 	           
 	        }
