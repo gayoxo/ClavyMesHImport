@@ -7,11 +7,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -32,11 +32,10 @@ import fdi.ucm.server.modelComplete.LoadCollection;
 import fdi.ucm.server.modelComplete.collection.CompleteCollection;
 import fdi.ucm.server.modelComplete.collection.CompleteCollectionAndLog;
 import fdi.ucm.server.modelComplete.collection.document.CompleteDocuments;
-import fdi.ucm.server.modelComplete.collection.document.CompleteLinkElement;
+import fdi.ucm.server.modelComplete.collection.document.CompleteElement;
 import fdi.ucm.server.modelComplete.collection.document.CompleteTextElement;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteElementType;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteGrammar;
-import fdi.ucm.server.modelComplete.collection.grammar.CompleteLinkElementType;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteTextElementType;
 
 /**
@@ -61,10 +60,29 @@ public class LoadCollectionMesH extends LoadCollection{
 		LoadCollectionMesH.consoleDebug=true;
 		
 		ArrayList<String> AA=new ArrayList<String>();
-		AA.add("MesH.zip");
-		AA.add(System.getProperty("user.home"));
 		
-		CompleteCollectionAndLog Salida=LC.processCollecccion(AA);
+		CompleteCollectionAndLog Salida=null;
+		
+		if (args.length==0)
+			{
+			AA.add("MesH.zip");
+			AA.add(System.getProperty("user.home"));
+			 Salida=LC.processCollecccion(AA);
+			}
+		else
+			{
+			String carpeta = args[0];
+			System.out.println(carpeta);
+			LinkedList<File> Archivos=new LinkedList<>();
+			 File destDir=new File(carpeta);
+			 if (destDir.exists())
+				 listFilesForFolder(destDir,Archivos);
+
+			Salida=LC.internalProcess(Archivos);
+			
+			}
+			
+		
 		if (Salida!=null)
 			{
 			
@@ -73,6 +91,19 @@ public class LoadCollectionMesH extends LoadCollection{
 			for (String warning : Salida.getLogLines())
 				System.err.println(warning);
 
+			
+			try {
+				String FileIO = System.getProperty("user.home")+"/"+System.currentTimeMillis()+".clavy";
+				
+				ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(FileIO));
+
+				oos.writeObject(Salida.getCollection());
+
+				oos.close();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			
 			
 			System.exit(0);
 			
@@ -85,7 +116,19 @@ public class LoadCollectionMesH extends LoadCollection{
 	}
 
 	
+	public static void listFilesForFolder(File folder, LinkedList<File> archivos) {
+	    for (File fileEntry : folder.listFiles()) {
+	        if (fileEntry.isDirectory()) {
+	            listFilesForFolder(fileEntry,archivos);
+	        } else {
+	        	archivos.add(fileEntry);
 
+	        }
+	    }
+	}
+	
+	
+	
 	@Override
 	public CompleteCollectionAndLog processCollecccion(ArrayList<String> dateEntrada) {
 		
@@ -117,7 +160,16 @@ public class LoadCollectionMesH extends LoadCollection{
 			e.printStackTrace();
 		}
 		
+		return internalProcess(Archivos);
 		
+		
+		
+		
+	}
+
+	
+
+	private CompleteCollectionAndLog internalProcess(LinkedList<File> Archivos) {
 		CompleteCollectionAndLog Salida=new CompleteCollectionAndLog();
 		CC=new CompleteCollection("MESH IMPORT", new Date()+"");
 		Salida.setCollection(CC);
@@ -143,11 +195,21 @@ public class LoadCollectionMesH extends LoadCollection{
 		CompleteGrammar MeSH=new CompleteGrammar("MeSH", "MeSH", CC);
 		CC.getMetamodelGrammar().add(MeSH);
 		
+		LinkedList<CompleteTextElementType> automaticL = new LinkedList<>();
+		
+		CompleteTextElementType automatic = new CompleteTextElementType("aut", MeSH);
+		automatic.setMultivalued(true);
+		automatic.setBrowseable(true);
+		automaticL.add(automatic);
+		
+		HashMap<String, CompleteElementType> Mayor=new HashMap<>();
+		
+		
 		for (File file : Archivos) {
 			 System.out.println(file.getAbsolutePath());
 			 
 			 try {
-				 ProcessXML(file,CC,uId,publisher,note,specialty,MeSH);
+				 ProcessXML(file,CC,uId,publisher,note,specialty,MeSH,automaticL,automatic,Mayor);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -158,15 +220,20 @@ public class LoadCollectionMesH extends LoadCollection{
 		}
 		
 		
+		for (CompleteTextElementType automaticEle : automaticL) {
+			MeSH.getSons().add(automaticEle);
+		}
+		
+		
 		return Salida;
-		
-		
 		
 	}
 
-	
 
-	private void ProcessXML(File file, CompleteCollection cC2, CompleteTextElementType uId, CompleteTextElementType publisher, CompleteTextElementType note, CompleteTextElementType specialty, CompleteGrammar meSH) throws ParserConfigurationException, SAXException, IOException {
+
+	private void ProcessXML(File file, CompleteCollection cC2, CompleteTextElementType uId, CompleteTextElementType publisher, CompleteTextElementType note, CompleteTextElementType specialty, 
+			CompleteGrammar meSH, LinkedList<CompleteTextElementType> automaticL, CompleteTextElementType automatic,
+			HashMap<String, CompleteElementType> mayor) throws ParserConfigurationException, SAXException, IOException {
 		CompleteDocuments D=new CompleteDocuments(cC2, "", "https://meshb.nlm.nih.gov/public/img/meshLogo.jpg");
 		cC2.getEstructuras().add(D);		
 				
@@ -232,6 +299,91 @@ public class LoadCollectionMesH extends LoadCollection{
 				D.getDescription().add(specialtyE);
 				}
 			}
+			
+			
+			
+			NodeList MeSHN = doc.getElementsByTagName("MeSH");
+			if (MeSHN.getLength()>0)
+			{
+				NodeList MeSHNH = ((Element)MeSHN.item(0)).getElementsByTagName("automatic");
+				for (int temp2 = 0; temp2 < MeSHNH.getLength(); temp2++)
+				{
+					Node nNodeH = MeSHNH.item(temp2);
+					String noteD = nNodeH.getTextContent();
+					if (!noteD.isEmpty())
+						{
+						while (automaticL.size()<=temp2)
+							{
+							CompleteTextElementType automatic2 = new CompleteTextElementType("aut", meSH);
+							automatic2.setClassOfIterator(automatic);
+							automaticL.add(automatic2);
+							}
+						
+						CompleteTextElementType mio=automaticL.get(temp2);
+						
+						CompleteTextElement automa=new CompleteTextElement(mio, noteD);
+						D.getDescription().add(automa);
+						
+						}
+					
+				}
+				
+				
+				NodeList majorH = ((Element)MeSHN.item(0)).getElementsByTagName("major");
+				for (int temp2 = 0; temp2 < majorH.getLength(); temp2++)
+				{
+					Node nNodeH = majorH.item(temp2);
+					String noteD = nNodeH.getTextContent();
+					if (!noteD.isEmpty())
+						{
+						
+						String[] tags=noteD.split("/");
+						String Acu="";
+						for (String string : tags) {
+							String AcuN=Acu+"/"+string.toLowerCase();
+							
+							CompleteElementType Previo = mayor.get(AcuN);
+							if (Previo==null)
+							{
+							//NO ESTA
+								Previo = new CompleteElementType(string, meSH);
+								Previo.setSelectable(true);
+								
+								if (Acu.isEmpty())
+									{
+									//SOBRE PAPA
+									meSH.getSons().add(Previo);
+									}
+								else
+								{	
+									CompleteElementType PrevioPA = mayor.get(Acu);
+									PrevioPA.getSons().add(Previo);
+									Previo.setFather(PrevioPA);
+									//TENGO PAPA Ele
+								}
+								
+								mayor.put(AcuN, Previo);
+								
+								CompleteElement automa=new CompleteElement(Previo);
+								D.getDescription().add(automa);
+								
+							}
+							//AQUI BUSCAR
+							
+							Acu=AcuN;
+						}
+						
+
+						
+						}
+					
+				}
+				
+				
+			}
+			
+			
+			
 			
 			
 	/**		NodeList Hijos=((Element)nList.item(0)).getChildNodes();
