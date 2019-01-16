@@ -33,9 +33,11 @@ import fdi.ucm.server.modelComplete.collection.CompleteCollection;
 import fdi.ucm.server.modelComplete.collection.CompleteCollectionAndLog;
 import fdi.ucm.server.modelComplete.collection.document.CompleteDocuments;
 import fdi.ucm.server.modelComplete.collection.document.CompleteElement;
+import fdi.ucm.server.modelComplete.collection.document.CompleteResourceElementURL;
 import fdi.ucm.server.modelComplete.collection.document.CompleteTextElement;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteElementType;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteGrammar;
+import fdi.ucm.server.modelComplete.collection.grammar.CompleteResourceElementType;
 import fdi.ucm.server.modelComplete.collection.grammar.CompleteTextElementType;
 
 /**
@@ -48,7 +50,7 @@ public class LoadCollectionMesH extends LoadCollection{
 	private static ArrayList<ImportExportPair> Parametros;
 	private CompleteCollection CC;
 	public static boolean consoleDebug=false;
-
+	private CompleteElementType MayorPadre=null;
 	
 	
 	
@@ -198,19 +200,36 @@ public class LoadCollectionMesH extends LoadCollection{
 		
 		LinkedList<CompleteTextElementType> automaticL = new LinkedList<>();
 		
-		CompleteTextElementType automatic = new CompleteTextElementType("aut", MeSH);
+		CompleteTextElementType automatic = new CompleteTextElementType("Automatica", MeSH);
 		automatic.setMultivalued(true);
 		automatic.setBrowseable(true);
 		automaticL.add(automatic);
 		
+		
+		
+		LinkedList<CompleteTextElementType> captionLis = new LinkedList<>();
+		
+		CompleteTextElementType caption = new CompleteTextElementType("Caption", MeSH);
+		caption.setMultivalued(true);
+		captionLis.add(caption);
+		
+		
+LinkedList<CompleteResourceElementType> imageURLLis = new LinkedList<>();
+		
+CompleteResourceElementType imageURL = new CompleteResourceElementType("Image", MeSH);
+		imageURL.setMultivalued(true);
+		imageURLLis.add(imageURL);
+		caption.setFather(imageURL);
+		imageURL.getSons().add(caption);
+		
+		
 		HashMap<String, CompleteElementType> Mayor=new HashMap<>();
-		
-		
+			
 		for (File file : Archivos) {
 			 System.out.println(file.getAbsolutePath());
 			 
 			 try {
-				 ProcessXML(file,CC,uId,publisher,note,specialty,MeSH,automaticL,automatic,Mayor);
+				 ProcessXML(file,CC,uId,publisher,note,specialty,MeSH,automaticL,automatic,Mayor,captionLis,caption,imageURLLis,imageURL);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -225,6 +244,10 @@ public class LoadCollectionMesH extends LoadCollection{
 			MeSH.getSons().add(automaticEle);
 		}
 		
+		for (CompleteResourceElementType automaticEle : imageURLLis) {
+			MeSH.getSons().add(automaticEle);
+		}
+		
 		
 		return Salida;
 		
@@ -234,7 +257,8 @@ public class LoadCollectionMesH extends LoadCollection{
 
 	private void ProcessXML(File file, CompleteCollection cC2, CompleteTextElementType uId, CompleteTextElementType publisher, CompleteTextElementType note, CompleteTextElementType specialty, 
 			CompleteGrammar meSH, LinkedList<CompleteTextElementType> automaticL, CompleteTextElementType automatic,
-			HashMap<String, CompleteElementType> mayor) throws ParserConfigurationException, SAXException, IOException {
+			HashMap<String, CompleteElementType> mayor, LinkedList<CompleteTextElementType> captionLis, CompleteTextElementType caption,
+			LinkedList<CompleteResourceElementType> imageURLLis, CompleteResourceElementType imageURL) throws ParserConfigurationException, SAXException, IOException {
 		CompleteDocuments D=new CompleteDocuments(cC2, "", "https://meshb.nlm.nih.gov/public/img/meshLogo.jpg");
 		cC2.getEstructuras().add(D);		
 				
@@ -242,12 +266,12 @@ public class LoadCollectionMesH extends LoadCollection{
 			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
 			Document doc = dBuilder.parse(file);
 			
-			NodeList title = doc.getElementsByTagName("title");
-			if (title.getLength()>0)
-			{
-				String Desc = title.item(0).getTextContent();
-				D.setDescriptionText(Desc);
-			}
+//			NodeList title = doc.getElementsByTagName("title");
+//			if (title.getLength()>0)
+//			{
+//				String Desc = title.item(0).getTextContent();
+//				D.setDescriptionText(Desc);
+//			}
 			
 			NodeList nList = doc.getElementsByTagName("uId");
 			if (nList.getLength()>0)
@@ -258,6 +282,7 @@ public class LoadCollectionMesH extends LoadCollection{
 					{
 					CompleteTextElement Uid=new CompleteTextElement(uId, GA);
 					D.getDescription().add(Uid);
+					D.setDescriptionText(GA);
 					}
 				}
 			
@@ -315,7 +340,7 @@ public class LoadCollectionMesH extends LoadCollection{
 						{
 						while (automaticL.size()<=temp2)
 							{
-							CompleteTextElementType automatic2 = new CompleteTextElementType("aut", meSH);
+							CompleteTextElementType automatic2 = new CompleteTextElementType(automatic.getName(), meSH);
 							automatic2.setClassOfIterator(automatic);
 							automaticL.add(automatic2);
 							}
@@ -328,6 +353,7 @@ public class LoadCollectionMesH extends LoadCollection{
 						}
 					
 				}
+				
 				
 				
 				NodeList majorH = ((Element)MeSHN.item(0)).getElementsByTagName("major");
@@ -349,11 +375,19 @@ public class LoadCollectionMesH extends LoadCollection{
 							//NO ESTA
 								Previo = new CompleteElementType(string, meSH);
 								Previo.setSelectable(true);
+								Previo.setBrowseable(true);
 								
 								if (Acu.isEmpty())
 									{
+									if (MayorPadre==null)
+										{
+										MayorPadre=new CompleteElementType("Manual", meSH);
+										MayorPadre.setBrowseable(true);
+										meSH.getSons().add(MayorPadre);
+										}
+
 									//SOBRE PAPA
-									meSH.getSons().add(Previo);
+									MayorPadre.getSons().add(Previo);
 									}
 								else
 								{	
@@ -365,11 +399,14 @@ public class LoadCollectionMesH extends LoadCollection{
 								
 								mayor.put(AcuN, Previo);
 								
-								CompleteElement automa=new CompleteElement(Previo);
-								D.getDescription().add(automa);
+								
 								
 							}
-							//AQUI BUSCAR
+							
+							
+							CompleteElement automa=new CompleteElement(Previo);
+							D.getDescription().add(automa);
+							
 							
 							Acu=AcuN;
 						}
@@ -384,8 +421,44 @@ public class LoadCollectionMesH extends LoadCollection{
 			}
 			
 			
-			
-			
+			NodeList parentImage = doc.getElementsByTagName("parentImage");
+			for (int temp2 = 0; temp2 < parentImage.getLength(); temp2++)
+			{
+				NodeList parenIma = ((Element)parentImage.item(0)).getElementsByTagName("caption");
+				NodeList urlI = ((Element)parentImage.item(0)).getElementsByTagName("url");
+				
+				if (urlI.getLength()!=0)
+				{
+				while (imageURLLis.size()<=temp2)
+					{
+					CompleteResourceElementType imageURL2 = new CompleteResourceElementType(imageURL.getName(), meSH);
+					imageURL2.setClassOfIterator(imageURL);
+					imageURLLis.add(imageURL2);
+					
+					CompleteTextElementType caption2 = new CompleteTextElementType(caption.getName(), meSH);
+					caption2.setClassOfIterator(caption);
+					captionLis.add(caption2);
+					
+					imageURL2.getSons().add(caption2);
+					caption2.setFather(imageURL2);
+
+					}
+				
+				CompleteResourceElementType mio=imageURLLis.get(temp2);
+				CompleteTextElementType mioC=captionLis.get(temp2);
+				
+				if (parenIma.getLength()>0)
+					{
+					CompleteTextElement automa=new CompleteTextElement(mioC, parenIma.item(0).getTextContent());
+					D.getDescription().add(automa);
+					}
+				
+					CompleteResourceElementURL automa=new CompleteResourceElementURL(mio, urlI.item(0).getTextContent());
+					D.getDescription().add(automa);
+				
+				}
+				
+			}
 			
 	/**		NodeList Hijos=((Element)nList.item(0)).getChildNodes();
 			for (int temp2 = 0; temp2 < Hijos.getLength(); temp2++)
